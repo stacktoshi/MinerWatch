@@ -388,7 +388,21 @@ def parse_si_difficulty(value: Any) -> float | None:
         parse_si_difficulty("0")         -> 0.0
         parse_si_difficulty(None)        -> None
         parse_si_difficulty("")          -> None
+        parse_si_difficulty(2**64 - 1)   -> None  # cgminer uint64 sentinel
     """
+    parsed = _parse_si_difficulty_raw(value)
+    if parsed is None:
+        return None
+    # Uninitialized uint64 (2**64-1). KBox/cgminer report this as
+    # best_share before any real share; float64 rounds it to
+    # 1.8446744073709552e+19, which is far above Bitcoin's network
+    # difficulty and used to fire a fake "block found".
+    if parsed >= float(2**64 - 1):
+        return None
+    return parsed
+
+
+def _parse_si_difficulty_raw(value: Any) -> float | None:
     if value is None:
         return None
     if isinstance(value, (int, float)):

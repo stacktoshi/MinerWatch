@@ -9,12 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **GekkoScience KBox support.** The KBox (Solo Mining Co firmware) speaks a
+  key-gated JSON API on port 80 (`GET /api/v1/status`, `GET /api/v1/pools`).
+  MinerWatch reads hashrate (already TH/s), chip temp, fan %, shares, best
+  share and dual-pool slots, and can set fan (percent or auto), power mode
+  (Low/Medium/High) and restart. Auth is the `X-API-Key` from
+  `KBOX_API_KEY` (environment or a gitignored `.env`). Auto-discovery
+  fingerprints the public `/login` page so a 401 on the Bitaxe probe does
+  not drop the host. Watts are not in the v1 API, so power/efficiency stay
+  blank. Pool donate and LED control are out of scope.
+
 - **Original Avalon Nano 3 support.** The original Nano 3 (not the Nano 3s)
   speaks the older nano-cli dialect on port 4028: work level via
   `ascset worklevel` (Low/Mid/High) and reboot via `ascset reboot,all`.
   Fan / frequency / voltage writes stay hidden. Auto-discovery fingerprints
   `MODEL=nano3` / `SWTYPE=MM318` / estats `Ver[nano3-…]` so a Nano 3s is
   never driven with this dialect.
+
+### Fixed
+
+- **False "block found" trophies.** Two firmware quirks were treated as
+  real blocks: (1) a cgminer-style `best_share` of `2**64-1` (KBox
+  uninitialized uint64, shown as 18.45 E) compared to Bitcoin's network
+  difficulty, and (2) AxeOS reporting the stratum *job* target as
+  `networkDifficulty` (~1–2 M) so a 54 M share looked like a block.
+  MinerWatch now drops the uint64 sentinel and only trusts a miner-
+  reported network difficulty when it matches BTC or BCH.
 
 ## [1.19.6] — 2026-08-04
 

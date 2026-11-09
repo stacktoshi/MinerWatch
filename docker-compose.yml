@@ -39,3 +39,7 @@ services:
       # from your phone / laptop on the same LAN.
       MINERWATCH_HOST: "0.0.0.0"
       MINERWATCH_PORT: "8000"
+      # GekkoScience KBox local API key (Settings → System → API Access
+      # on the box). Compose interpolates this from a gitignored `.env`
+      # in the project root; leave unset if you have no KBox.
+      KBOX_API_KEY: ${KBOX_API_KEY:-}

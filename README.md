@@ -5,9 +5,9 @@
 **A local-first dashboard for home Bitcoin miners.**
 
 Monitor and control Bitaxe, NerdQAxe / NerdOCTAXE, BitForge Nano, NMAxe,
-Canaan Avalon Nano 3s and Braiins BMM miners — plus read-only monitoring of
-LuxOS Antminer / Whatsminer rigs — on your home network, all from your
-browser. No cloud, no telemetry.
+Canaan Avalon, GekkoScience KBox and Braiins BMM miners — plus read-only
+monitoring of LuxOS Antminer / Whatsminer rigs — on your home network, all
+from your browser. No cloud, no telemetry.
 
 [![CI](https://github.com/imlenti/MinerWatch/actions/workflows/ci.yml/badge.svg)](https://github.com/imlenti/MinerWatch/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
@@ -186,6 +186,7 @@ comfortable opening a terminal but not necessarily developers.
 | NMAxe             | NMAxe (BM1366), NMAxeGamma, NMQAxe++        | HTTP REST :80 (AxeOS fork)        | Fan + restart |
 | Canaan Avalon     | Nano 3s                                     | TCP cgminer-text :4028           | Full       |
 | Canaan Avalon     | Nano 3 (original)                           | TCP cgminer-text :4028           | Work mode + restart |
+| GekkoScience KBox | KBox (Solo Mining Co firmware)              | HTTP REST :80 (`X-API-Key`)      | Fan + work mode + restart |
 | Braiins           | BMM 101 (BOSminer firmware)                | TCP cgminer-JSON :4028           | Full       |
 | LuxOS (Luxor)     | Bitmain Antminer S19 / S21, MicroBT Whatsminer | TCP cgminer-JSON :4028        | Monitor only |
 
@@ -214,13 +215,24 @@ family (`canaannano3`). It speaks the older nano-cli dialect on port
 and stay hidden. Auto-discovery fingerprints `MODEL=nano3` (or
 `SWTYPE=MM318`) so a Nano 3s is never driven with this dialect.
 
+The **GekkoScience KBox** (`kbox`) is a BM1370 heater/miner with a Flask
+web UI and a local JSON API under `/api/v1/*`. Authenticate with the
+`X-API-Key` from Settings → System → API Access on the box, passed to
+MinerWatch as `KBOX_API_KEY` (process environment, or a gitignored `.env`
+in the repo root — Docker Compose interpolates the same variable).
+Auto-discovery fingerprints the public `/login` page. Polling uses
+`GET /api/v1/status` and `GET /api/v1/pools` (hashrate is already TH/s).
+Controls are fan (percent or auto), power mode Low/Medium/High, and
+restart. The v1 API does not expose watts or pool writes.
+
 **LuxOS is monitoring-only for now.** MinerWatch reads hashrate, temps,
 fans, power and pools from LuxOS-flashed Antminer/Whatsminer rigs, but
 exposes no control buttons — LuxOS write commands need a stateful
 session that's intentionally left for a later release. The other
 families (Bitaxe, Nerd*, BitForge, Canaan Nano 3s, Braiins) support full
 fan / frequency / voltage / restart control; **NMAxe** is fan + restart
-only; **Avalon Nano 3** is work mode + restart.
+only; **Avalon Nano 3** is work mode + restart; **KBox** is fan + work
+mode + restart.
 
 Adding a new model usually means a single new file in `backend/miners/`.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the driver template.
@@ -645,9 +657,10 @@ protected request) rather than silently allowing access.
 ## Discovery
 
 When you click **Scan network** on the dashboard, MinerWatch scans the
-configured subnet for ports 80 (Bitaxe-class) and 4028 (cgminer / Avalon
+configured subnet for ports 80 (Bitaxe-class / KBox) and 4028 (cgminer / Avalon
 / Braiins) and auto-registers any miner it finds. Devices are identified
-by MAC, so DHCP lease changes don't break the time series.
+by MAC when the firmware exposes one, so DHCP lease changes don't break the
+time series; KBox and NMAxe have no MAC and are keyed on host.
 
 Discovery is **on demand** by design — a continuous /24 scan would make
 noise on the LAN every few minutes and isn't necessary on a stable home

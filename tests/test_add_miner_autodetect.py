@@ -31,16 +31,18 @@ def test_identify_host_offline_returns_none():
 def test_identify_host_port80_uses_bitaxe_fingerprint():
     """Port 80 open -> AxeOS fingerprint, cgminer path not consulted.
 
-    NMAxe is fingerprinted first (its /probe path); when it declines,
-    detection falls through to the Bitaxe path."""
+    NMAxe is fingerprinted first (its /probe path), then KBox (public
+    /login page); when both decline, detection falls through to Bitaxe."""
     detected = {"family": "nerdoctaxe", "host": "10.0.0.5", "port": 80}
     with patch.object(discovery, "_open_ports", AsyncMock(return_value=[discovery.PORT_BITAXE])), \
          patch.object(discovery, "_identify_nmaxe", AsyncMock(return_value=None)) as nm, \
+         patch.object(discovery, "_identify_kbox", AsyncMock(return_value=None)) as kb, \
          patch.object(discovery, "_identify_bitaxe", AsyncMock(return_value=detected)) as ax, \
          patch.object(discovery, "_identify_cgminer", AsyncMock()) as cg:
         result = asyncio.run(discovery.identify_host("10.0.0.5", timeout=0.1))
     assert result == detected
     nm.assert_awaited_once_with("10.0.0.5")
+    kb.assert_awaited_once_with("10.0.0.5")
     ax.assert_awaited_once_with("10.0.0.5")
     cg.assert_not_awaited()
 

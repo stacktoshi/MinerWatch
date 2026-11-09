@@ -118,6 +118,7 @@ export const FAMILY_LABEL: Record<string, string> = {
   nmaxe: 'NMAxe',
   canaan: 'Canaan / Avalon',
   canaannano3: 'Canaan / Avalon Nano 3',
+  kbox: 'GekkoScience KBox',
   braiins: 'Braiins / BMM',
   luxos: 'LuxOS (Antminer)',
 };

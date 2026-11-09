@@ -27,6 +27,36 @@ from .ambient_temp import ambient
 log = logging.getLogger("minerwatch.poller")
 
 
+def trusted_network_difficulty(sample, miner: dict | None, references) -> float | None:
+    """Network difficulty to grade a share against for block-found.
+
+    Miner-reported ``network_difficulty`` is only trusted when it matches
+    a known chain (BTC / BCH) against ``references``. AxeOS has been
+    seen reporting the stratum *job* target there (~1–2 M) which is not
+    a chain difficulty — comparing a 54 M share to that fired a fake
+    block. Untrusted or missing values fall through to coin classification
+    (address / pool / override) and that coin's reference difficulty.
+    """
+    reported = getattr(sample, "network_difficulty", None)
+    if reported is not None:
+        try:
+            reported_f = float(reported)
+        except (TypeError, ValueError):
+            reported_f = None
+        else:
+            if reported_f > 0 and coin_mod.classify_by_difficulty(reported_f, references):
+                return reported_f
+    miner_coin, _ = coin_mod.classify(miner, sample, references)
+    if miner_coin:
+        ref = references.get(miner_coin)
+        try:
+            if ref is not None and float(ref) > 0:
+                return float(ref)
+        except (TypeError, ValueError):
+            pass
+    return None
+
+
 class Poller:
     def __init__(self) -> None:
         self._task: asyncio.Task | None = None
@@ -152,29 +182,15 @@ class Poller:
                 # to False; this branch will short-circuit immediately.
                 # =====================================================
                 if alerts.BLOCK_FOUND_ENABLED and sample.best_difficulty is not None:
-                    # Prefer the network difficulty the miner itself is
-                    # using (consistent with its share grading). Fall
-                    # back to the cached/external value otherwise.
-                    #
-                    # The fallback must be the difficulty of the coin THIS
-                    # miner is on: alerts.get_network_difficulty() only ever
-                    # knows about Bitcoin, so on firmware that reports no
-                    # stratum difficulty (Braiins, LuxOS, Canaan) a BCH miner
-                    # used to be measured against the BTC target — roughly a
-                    # thousand times too high, meaning a real BCH block would
-                    # never have fired this alert. Resolve the coin first and
-                    # use its own difficulty; fall through to the Bitcoin
-                    # path only when the coin is genuinely unknown.
-                    network_diff = None
-                    if sample.network_difficulty:
-                        network_diff = float(sample.network_difficulty)
-                    else:
-                        references = coin_difficulty.cached_references()
-                        miner_coin, _ = coin_mod.classify(
-                            miners_by_id.get(miner_id), sample, references
-                        )
-                        if miner_coin:
-                            network_diff = references.get(miner_coin)
+                    # Miner-reported network difficulty is only used when it
+                    # matches a known chain; pool/job targets are rejected
+                    # (see trusted_network_difficulty). Otherwise classify
+                    # the miner and use that coin's reference difficulty.
+                    # Last resort: Bitcoin via mempool.space.
+                    references = coin_difficulty.cached_references()
+                    network_diff = trusted_network_difficulty(
+                        sample, miners_by_id.get(miner_id), references
+                    )
                     if network_diff is None:
                         network_diff = await alerts.get_network_difficulty()
                     if network_diff and sample.best_difficulty >= network_diff:

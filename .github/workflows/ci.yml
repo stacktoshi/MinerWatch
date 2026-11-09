@@ -60,6 +60,7 @@ jobs:
             backend/miners/braiins.py \
             backend/miners/canaan.py \
             backend/miners/canaannano3.py \
+            backend/miners/kbox.py \
             backend/miners/cgminer_client.py
 
       - name: Import the FastAPI app (smoke test)
@@ -93,6 +94,7 @@ jobs:
               (None, None),
               ('', None),
               ('foo', None),
+              (2**64 - 1, None),  # cgminer uninitialized best_share
           ]
           for inp, exp in cases:
               got = p(inp)
@@ -102,3 +104,8 @@ jobs:
                   assert abs(got - exp) < 1e-6, (inp, got, exp)
           print('parse_si_difficulty OK')
           "
+
+      - name: Regression — false block-found guards
+        # Uint64-max best_share and pool-target-as-network-difficulty
+        # must not fire a block trophy (see tests/test_block_found.py).
+        run: python tests/test_block_found.py

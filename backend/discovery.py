@@ -3,8 +3,8 @@
 
 Scans the subnet (configurable CIDR) probing ports 80 and 4028.
 For every IP that answers we try the supported drivers to determine
-the family (Bitaxe/NerdQAxe/BitForge via REST, Avalon/Braiins via
-cgminer-API).
+the family (Bitaxe/NerdQAxe/BitForge/NMAxe/KBox via REST, Avalon/Braiins
+via cgminer-API).
 
 How it works:
 - Non-blocking TCP socket with a short timeout (~0.4s)
@@ -27,9 +27,11 @@ from .miners import (
     BraiinsDriver,
     CanaanDriver,
     CanaanNano3Driver,
+    KboxDriver,
     LuxosDriver,
     NmaxeDriver,
 )
+from .miners.kbox import login_html_is_kbox
 from .miners.cgminer_client import CgminerClient, CgminerError
 
 log = logging.getLogger("minerwatch.discovery")
@@ -128,6 +130,28 @@ async def _identify_nmaxe(host: str) -> dict | None:
         "mac": None,
         "model": model,
         "name": probe.get("hostname") or model or f"NMAxe {host}",
+    }
+
+
+async def _identify_kbox(host: str) -> dict | None:
+    """Identify a GekkoScience KBox from its public ``/login`` page.
+
+    The KBox REST API is key-gated, so ``GET /api/system/info`` (the
+    Bitaxe fingerprint) returns 401 and would otherwise drop the host.
+    ``/login`` is public and the HTML contains ``GekkoScience KBox``.
+    Identity is keyed on the host — the firmware exposes no MAC.
+    """
+    drv = KboxDriver(host=host, timeout=2)
+    html = await drv.fetch_login_html()
+    if not login_html_is_kbox(html):
+        return None
+    return {
+        "family": "kbox",
+        "host": host,
+        "port": PORT_BITAXE,
+        "mac": None,
+        "model": "KBox",
+        "name": f"KBox {host}",
     }
 
 
@@ -405,6 +429,7 @@ def _default_model(family: str) -> str:
         "braiins": "BMM101",
         "canaan": "Avalon",
         "canaannano3": "Avalon Nano 3",
+        "kbox": "KBox",
     }.get(family, family.title())
 
 
@@ -437,6 +462,11 @@ async def _identify_from_ports(host: str, ports: list[int]) -> dict | None:
         # parser, and an "NMQAxe++" would be mis-claimed by _identify_bitaxe's
         # "qaxe" → nerdoctaxe heuristic if that ran first.
         info = await _identify_nmaxe(host)
+        if not info:
+            # KBox next: its /api/v1 is key-gated, so the Bitaxe probe
+            # would 401 and drop the host. The public /login page is the
+            # fingerprint.
+            info = await _identify_kbox(host)
         if not info:
             info = await _identify_bitaxe(host)
     if not info and PORT_CGMINER in ports:
